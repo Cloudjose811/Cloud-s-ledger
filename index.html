@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Ledger with CSV Export & Monthly Summary</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+    th { background-color: #f4f4f4; }
+    input[type="number"] { width: 80px; }
+    input[type="text"], input[type="date"] { width: 100%; }
+    button { margin: 5px 5px 0 0; padding: 8px 16px; }
+    #summary { margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h2>Ledger</h2>
+  <div>
+    <button onclick="addRow()">Add Entry</button>
+    <button onclick="exportCSV()">Export to CSV</button>
+    <button onclick="window.print()">Print</button>
+  </div>
+  <table id="ledger">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Description</th>
+        <th>Revenue (+)</th>
+        <th>Expense (−)</th>
+        <th>Balance</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <div id="summary">
+    <h3>Monthly Summary</h3>
+    <table id="monthlySummary">
+      <thead>
+        <tr>
+          <th>Month</th>
+          <th>Total Revenue</th>
+          <th>Total Expense</th>
+          <th>Net</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <script>
+    let data = JSON.parse(localStorage.getItem('ledgerData')) || [];
+
+    function addRow(entry = {date: '', description: '', revenue: '', expense: ''}) {
+      const tbody = document.querySelector("#ledger tbody");
+      const row = document.createElement("tr");
+
+      row.innerHTML = `
+        <td><input type="date" value="${entry.date}" onchange="saveData()" /></td>
+        <td><input type="text" value="${entry.description}" onchange="saveData()" /></td>
+        <td><input type="number" value="${entry.revenue}" onchange="saveData()" /></td>
+        <td><input type="number" value="${entry.expense}" onchange="saveData()" /></td>
+        <td class="balance">0.00</td>
+        <td><button onclick="deleteRow(this)">Delete</button></td>
+      `;
+
+      tbody.appendChild(row);
+      saveData();
+    }
+
+    function deleteRow(button) {
+      const row = button.closest("tr");
+      row.remove();
+      saveData();
+    }
+
+    function saveData() {
+      const rows = document.querySelectorAll("#ledger tbody tr");
+      let balance = 0;
+      const entries = [];
+
+      rows.forEach(row => {
+        const cells = row.querySelectorAll("input");
+        const date = cells[0].value;
+        const description = cells[1].value;
+        const revenue = parseFloat(cells[2].value) || 0;
+        const expense = parseFloat(cells[3].value) || 0;
+        balance += revenue - expense;
+        row.querySelector(".balance").textContent = balance.toFixed(2);
+
+        entries.push({ date, description, revenue, expense });
+      });
+
+      localStorage.setItem('ledgerData', JSON.stringify(entries));
+      data = entries;
+      updateMonthlySummary();
+    }
+
+    function updateMonthlySummary() {
+      const monthly = {};
+      data.forEach(({ date, revenue, expense }) => {
+        if (!date) return;
+        const month = date.slice(0, 7);
+        if (!monthly[month]) monthly[month] = { revenue: 0, expense: 0 };
+        monthly[month].revenue += parseFloat(revenue) || 0;
+        monthly[month].expense += parseFloat(expense) || 0;
+      });
+
+      const tbody = document.querySelector("#monthlySummary tbody");
+      tbody.innerHTML = "";
+      Object.entries(monthly).forEach(([month, values]) => {
+        const net = values.revenue - values.expense;
+        const row = `<tr>
+          <td>${month}</td>
+          <td>${values.revenue.toFixed(2)}</td>
+          <td>${values.expense.toFixed(2)}</td>
+          <td>${net.toFixed(2)}</td>
+        </tr>`;
+        tbody.insertAdjacentHTML("beforeend", row);
+      });
+    }
+
+    function exportCSV() {
+      let csv = "Date,Description,Revenue,Expense,Balance\\n";
+      let balance = 0;
+      data.forEach(entry => {
+        const rev = parseFloat(entry.revenue) || 0;
+        const exp = parseFloat(entry.expense) || 0;
+        balance += rev - exp;
+        csv += `${entry.date},${entry.description},${rev},${exp},${balance.toFixed(2)}\\n`;
+      });
+
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "ledger.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function loadData() {
+      data.forEach(entry => addRow(entry));
+    }
+
+    loadData();
+  </script>
+</body>
+</html>
